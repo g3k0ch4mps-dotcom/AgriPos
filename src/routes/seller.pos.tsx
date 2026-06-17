@@ -1,12 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Minus, Plus, ShoppingCart, X, Check, Printer } from "lucide-react";
 import { format } from "date-fns";
 import { SellerLayout } from "@/components/seller/SellerLayout";
 import { supabase, type Product, type Category } from "@/integrations/supabase/client";
 import { formatKES } from "@/lib/format";
+import { useOnline } from "@/hooks/use-online";
+import { enqueue, getQueue, dequeue } from "@/lib/offline-queue";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/seller/pos")({
@@ -17,6 +19,7 @@ type CartLine = { product: Product; qty: number };
 
 function POS() {
   const qc = useQueryClient();
+  const online = useOnline();
   const [cart, setCart] = useState<CartLine[]>([]);
   const [customer, setCustomer] = useState("");
   const [catFilter, setCatFilter] = useState<string | null>(null);
@@ -70,13 +73,49 @@ function POS() {
     }));
   };
 
+  useEffect(() => {
+    if (!online) return;
+    const queue = getQueue();
+    if (queue.length === 0) return;
+
+    (async () => {
+      let synced = 0;
+      for (const sale of queue) {
+        try {
+          const { error } = await supabase.rpc("create_sale", {
+            p_customer_name: sale.customer_name,
+            p_items: sale.items,
+          });
+          if (!error) {
+            dequeue(sale.id);
+            synced++;
+          }
+        } catch {}
+      }
+      if (synced > 0) {
+        toast.success(`${synced} offline sale${synced > 1 ? "s" : ""} synced successfully.`);
+        qc.invalidateQueries({ queryKey: ["seller-products"] });
+        qc.invalidateQueries({ queryKey: ["my-sales"] });
+      }
+    })();
+  }, [online]);
+
   const confirm = useMutation({
     mutationFn: async () => {
       const items = cart.map((l) => ({ product_id: l.product.id, quantity: l.qty }));
+
+      if (!online) {
+        enqueue({ customer_name: customer, items, total });
+        return;
+      }
+
       const { error } = await supabase.rpc("create_sale", { p_customer_name: customer, p_items: items });
       if (error) throw error;
     },
     onSuccess: () => {
+      if (!online) {
+        toast.warning("No internet \u2014 sale saved locally and will sync when you\u2019re back online.");
+      }
       setConfirmed({ items: cart, total, at: new Date(), customer });
       setCart([]); setCustomer(""); setCartOpen(false);
       qc.invalidateQueries({ queryKey: ["seller-products"] });

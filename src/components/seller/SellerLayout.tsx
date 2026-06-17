@@ -1,13 +1,17 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 import { motion } from "framer-motion";
-import { ShoppingCart, ListOrdered, LogOut, Sprout } from "lucide-react";
+import { ShoppingCart, ListOrdered, LogOut, Sprout, WifiOff } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { useOnline } from "@/hooks/use-online";
+import { getQueue } from "@/lib/offline-queue";
 
 export function SellerLayout({ children }: { children: ReactNode }) {
   const { profile, loading, session, signOut } = useAuth();
   const navigate = useNavigate();
   const path = useRouterState({ select: (s) => s.location.pathname });
+  const online = useOnline();
+  const pending = getQueue().length;
 
   useEffect(() => {
     if (loading) return;
@@ -37,6 +41,16 @@ export function SellerLayout({ children }: { children: ReactNode }) {
           </button>
         </div>
       </header>
+
+      {!online && (
+        <div className="flex items-center gap-2 border-b border-amber-500/20 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-700 dark:text-amber-300">
+          <WifiOff className="h-4 w-4 shrink-0" />
+          <span>
+            No internet connection. Sales will be saved locally and synced when you reconnect.
+            {pending > 0 && ` (${pending} pending)`}
+          </span>
+        </div>
+      )}
 
       <motion.main
         key={path}
