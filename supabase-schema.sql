@@ -18,13 +18,20 @@ alter table public.profiles enable row level security;
 grant select, insert, update on public.profiles to authenticated;
 grant all on public.profiles to service_role;
 
+-- Helper to check owner status without RLS recursion
+create or replace function public.is_owner(uid uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (select 1 from public.profiles where id = uid and role = 'owner');
+$$;
+
 drop policy if exists "profiles read own or owner" on public.profiles;
 create policy "profiles read own or owner" on public.profiles
   for select to authenticated
-  using (
-    id = auth.uid()
-    or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'owner')
-  );
+  using (id = auth.uid() or public.is_owner(auth.uid()));
 
 drop policy if exists "profiles insert self" on public.profiles;
 create policy "profiles insert self" on public.profiles
@@ -32,10 +39,8 @@ create policy "profiles insert self" on public.profiles
 
 drop policy if exists "profiles update self or owner" on public.profiles;
 create policy "profiles update self or owner" on public.profiles
-  for update to authenticated using (
-    id = auth.uid()
-    or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'owner')
-  );
+  for update to authenticated
+  using (id = auth.uid() or public.is_owner(auth.uid()));
 
 -- Auto-create profile on signup. The first user to sign up becomes the owner.
 create or replace function public.handle_new_user()
@@ -80,8 +85,8 @@ create policy "categories read all" on public.categories for select using (true)
 drop policy if exists "categories owner write" on public.categories;
 create policy "categories owner write" on public.categories
   for all to authenticated
-  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'owner'))
-  with check (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'owner'));
+  using (public.is_owner(auth.uid()))
+  with check (public.is_owner(auth.uid()));
 
 insert into public.categories (name) values
   ('Calcium'), ('Fertilizers'), ('Kensalt'), ('Nevira'), ('Sacks'), ('Tents/Hema')
@@ -115,8 +120,8 @@ create policy "products read all auth" on public.products
 drop policy if exists "products owner write" on public.products;
 create policy "products owner write" on public.products
   for all to authenticated
-  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'owner'))
-  with check (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'owner'));
+  using (public.is_owner(auth.uid()))
+  with check (public.is_owner(auth.uid()));
 
 -- sales --------------------------------------------------------------
 create table if not exists public.sales (
