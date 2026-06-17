@@ -406,17 +406,17 @@ function Landing() {
                 }}
               >
                 <span
-                  className="absolute select-none text-[4rem] font-extrabold opacity-15"
+                  className="absolute select-none text-[4rem] font-extrabold opacity-[0.12]"
                   style={{
                     color: theme === "dark" ? "#4a7c2f" : "#283618",
-                    top: "-0.3em",
-                    left: "-0.1em",
+                    top: "-1em",
+                    left: "-0.15em",
                     lineHeight: 1,
                   }}
                 >
                   {String(i + 1).padStart(2, "0")}
                 </span>
-                <p className="relative text-base" style={{ lineHeight: 1.7, paddingTop: "1rem" }}>
+                <p className="relative text-base" style={{ lineHeight: 1.7, paddingTop: "3rem" }}>
                   {step}
                 </p>
               </motion.div>
