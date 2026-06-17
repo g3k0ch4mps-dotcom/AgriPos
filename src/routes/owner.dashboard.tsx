@@ -1,13 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { motion, useInView, useMotionValue, useTransform, animate } from "framer-motion";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, LineChart, Line,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from "recharts";
 import { format, subDays, startOfDay, startOfMonth, endOfMonth, subMonths, getHours } from "date-fns";
-import { TrendingUp, TrendingDown, Package, ShoppingBag, DollarSign, Boxes } from "lucide-react";
+import { TrendingUp, TrendingDown, Package, ShoppingBag, DollarSign, Boxes, Users } from "lucide-react";
 import { OwnerLayout } from "@/components/owner/OwnerLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { formatKES } from "@/lib/format";
@@ -25,22 +25,25 @@ type ProductRow = {
 type CategoryRow = { id: string; name: string };
 
 function Dashboard() {
+  const [range, setRange] = useState(30);
   const since = subDays(new Date(), 60).toISOString();
 
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard"],
     queryFn: async () => {
-      const [salesR, itemsR, prodR, catR] = await Promise.all([
+      const [salesR, itemsR, prodR, catR, profR] = await Promise.all([
         supabase.from("sales").select("id,total_amount,created_at,seller_id").gte("created_at", since).order("created_at"),
         supabase.from("sale_items").select("quantity,subtotal,product_id,sale_id"),
         supabase.from("products").select("id,brand,size,stock_quantity,low_stock_threshold,price,category_id,is_active"),
         supabase.from("categories").select("id,name"),
+        supabase.from("profiles").select("id,full_name"),
       ]);
       return {
         sales: (salesR.data ?? []) as SaleRow[],
         items: (itemsR.data ?? []) as SaleItemRow[],
         products: (prodR.data ?? []) as ProductRow[],
         categories: (catR.data ?? []) as CategoryRow[],
+        profiles: (profR.data ?? []) as { id: string; full_name: string }[],
       };
     },
   });
@@ -53,7 +56,7 @@ function Dashboard() {
     );
   }
 
-  const { sales, items, products, categories } = data;
+  const { sales, items, products, categories, profiles } = data;
   const todayStart = startOfDay(new Date());
   const yesterdayStart = startOfDay(subDays(new Date(), 1));
   const monthStart = startOfMonth(new Date());
@@ -71,9 +74,9 @@ function Dashboard() {
   const monthRev = monthSales.reduce((a, s) => a + Number(s.total_amount), 0);
   const activeProducts = products.filter((p) => p.is_active).length;
 
-  // Revenue trend (30d)
+  // Revenue trend
   const trend: { date: string; revenue: number; tx: number }[] = [];
-  for (let i = 29; i >= 0; i--) {
+  for (let i = range - 1; i >= 0; i--) {
     const d = startOfDay(subDays(new Date(), i));
     const dayStr = format(d, "MMM d");
     const dayEnd = new Date(d); dayEnd.setDate(dayEnd.getDate() + 1);
@@ -103,6 +106,22 @@ function Dashboard() {
     })
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 8);
+
+  // Seller performance
+  const sellerRev = new Map<string, number>();
+  const sellerTx = new Map<string, number>();
+  for (const s of sales) {
+    if (!s.seller_id) continue;
+    sellerRev.set(s.seller_id, (sellerRev.get(s.seller_id) ?? 0) + Number(s.total_amount));
+    sellerTx.set(s.seller_id, (sellerTx.get(s.seller_id) ?? 0) + 1);
+  }
+  const sellerData = Array.from(sellerRev.entries())
+    .map(([sid, rev]) => ({
+      name: profiles.find((p) => p.id === sid)?.full_name ?? sid.slice(0, 8),
+      revenue: rev,
+      tx: sellerTx.get(sid) ?? 0,
+    }))
+    .sort((a, b) => b.revenue - a.revenue);
 
   // Hourly today
   const hourly = Array.from({ length: 24 }, (_, h) => ({ hour: `${h}h`, value: 0 }));
@@ -134,9 +153,22 @@ function Dashboard() {
           <Kpi label="Active Products" value={activeProducts} icon={Package} />
         </div>
 
+        {/* Range toggle */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Range</span>
+          <div className="flex gap-1 rounded-lg border border-border bg-card p-0.5">
+            {[7, 30, 60].map((d) => (
+              <button key={d} onClick={() => setRange(d)}
+                className={`rounded-md px-3 py-1 text-xs font-semibold transition ${range === d ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+                {d}d
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Charts row 1 */}
         <div className="grid gap-4 lg:grid-cols-3">
-          <Card title="Revenue trend — last 30 days" className="lg:col-span-2">
+          <Card title={`Revenue trend — last ${range} days`} className="lg:col-span-2">
             {trend.every((t) => t.revenue === 0) ? <Empty msg="No sales yet — start selling to see your trend." /> : (
               <ResponsiveContainer width="100%" height={280}>
                 <AreaChart data={trend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
@@ -216,6 +248,21 @@ function Dashboard() {
           </Card>
         </div>
 
+        {/* Seller performance */}
+        {sellerData.length > 0 && (
+          <Card title="Seller performance">
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={sellerData} layout="vertical" margin={{ left: 100 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--color-border)" />
+                <XAxis type="number" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} width={120} />
+                <Tooltip content={<CT money />} />
+                <Bar dataKey="revenue" fill="var(--color-primary)" radius={[0, 4, 4, 0]} animationDuration={1200} />
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+        )}
+
         {/* Month comparison */}
         <Card title="This month vs last month">
           <ResponsiveContainer width="100%" height={260}>
@@ -235,7 +282,7 @@ function Dashboard() {
         <Card title="Stock health">
           {products.length === 0 ? <Empty msg="No products yet — add products to track stock." /> : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {products.filter((p) => p.is_active).map((p) => {
+              {products.filter((p) => p.is_active).sort((a, b) => a.stock_quantity - b.stock_quantity).map((p) => {
                 const pct = Math.min(100, Math.round((p.stock_quantity / Math.max(p.low_stock_threshold * 3, 1)) * 100));
                 const low = p.stock_quantity <= p.low_stock_threshold;
                 const out = p.stock_quantity === 0;

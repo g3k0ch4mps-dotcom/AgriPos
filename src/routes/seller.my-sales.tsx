@@ -21,15 +21,26 @@ function MySales() {
     enabled: !!profile,
     queryFn: async () => {
       const fromIso = startOfDay(new Date()).toISOString();
-      const [sales, items, products] = await Promise.all([
-        supabase.from("sales").select("*").eq("seller_id", profile!.id).gte("created_at", fromIso).order("created_at", { ascending: false }),
-        supabase.from("sale_items").select("*"),
+
+      const [salesR, productsR] = await Promise.all([
+        supabase.from("sales").select("*")
+          .eq("seller_id", profile!.id)
+          .gte("created_at", fromIso)
+          .order("created_at", { ascending: false }),
         supabase.from("products").select("id,brand,size"),
       ]);
+
+      const sales = (salesR.data ?? []) as Sale[];
+      const saleIds = sales.map((s) => s.id);
+
+      const itemsR = saleIds.length > 0
+        ? await supabase.from("sale_items").select("*").in("sale_id", saleIds)
+        : { data: [] };
+
       return {
-        sales: (sales.data ?? []) as Sale[],
-        items: (items.data ?? []) as SaleItem[],
-        products: (products.data ?? []) as Product[],
+        sales,
+        items: (itemsR.data ?? []) as SaleItem[],
+        products: (productsR.data ?? []) as Product[],
       };
     },
   });

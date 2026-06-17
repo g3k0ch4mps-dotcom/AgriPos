@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Search, Pencil, Trash2, X } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, X, PackagePlus } from "lucide-react";
 import { OwnerLayout } from "@/components/owner/OwnerLayout";
 import { supabase, type Product, type Category } from "@/integrations/supabase/client";
 import { formatKES } from "@/lib/format";
@@ -19,6 +19,8 @@ function Products() {
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState<Draft | null>(null);
   const [confirmDel, setConfirmDel] = useState<Product | null>(null);
+  const [restock, setRestock] = useState<Product | null>(null);
+  const [restockQty, setRestockQty] = useState(0);
 
   const { data: products = [] } = useQuery({
     queryKey: ["products"],
@@ -75,13 +77,27 @@ function Products() {
 
   const del = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("products").delete().eq("id", id);
+      const { error } = await supabase.from("products").update({ is_active: false, updated_at: new Date().toISOString() }).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["products"] });
-      toast.success("Deleted");
+      toast.success("Product deactivated");
       setConfirmDel(null);
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const restockMutation = useMutation({
+    mutationFn: async ({ id, currentQty, qty }: { id: string; currentQty: number; qty: number }) => {
+      const { error } = await supabase.from("products").update({ stock_quantity: currentQty + qty, updated_at: new Date().toISOString() }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["products"] });
+      toast.success("Stock updated");
+      setRestock(null);
+      setRestockQty(0);
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -157,6 +173,7 @@ function Products() {
                     </button>
                   </td>
                   <td className="px-4 py-3 text-right">
+                    <button onClick={() => { setRestock(p); setRestockQty(0); }} className="rounded p-1.5 hover:bg-accent text-emerald-600"><PackagePlus className="h-3.5 w-3.5" /></button>
                     <button onClick={() => setEditing(p)} className="rounded p-1.5 hover:bg-accent"><Pencil className="h-3.5 w-3.5" /></button>
                     <button onClick={() => setConfirmDel(p)} className="rounded p-1.5 hover:bg-accent text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>
                   </td>
@@ -184,8 +201,9 @@ function Products() {
               <div className="mt-3 flex items-center justify-between text-xs">
                 <span className={out ? "text-destructive" : low ? "text-amber-600" : "text-muted-foreground"}>{p.stock_quantity} in stock</span>
                 <div className="flex gap-2">
+                  <button onClick={() => { setRestock(p); setRestockQty(0); }} className="rounded border border-border px-2 py-1 text-emerald-600">Restock</button>
                   <button onClick={() => setEditing(p)} className="rounded border border-border px-2 py-1">Edit</button>
-                  <button onClick={() => setConfirmDel(p)} className="rounded border border-border px-2 py-1 text-destructive">Delete</button>
+                  <button onClick={() => setConfirmDel(p)} className="rounded border border-border px-2 py-1 text-destructive">Deactivate</button>
                 </div>
               </div>
             </div>
@@ -242,11 +260,41 @@ function Products() {
         {confirmDel && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setConfirmDel(null)}>
             <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="w-full max-w-sm rounded-xl border border-border bg-card p-6" onClick={(e) => e.stopPropagation()}>
-              <h3 className="text-lg font-semibold">Delete product?</h3>
-              <p className="mt-2 text-sm text-muted-foreground">"{confirmDel.brand}" will be permanently removed.</p>
+              <h3 className="text-lg font-semibold">Deactivate product?</h3>
+              <p className="mt-2 text-sm text-muted-foreground">"{confirmDel.brand}" will be hidden from POS but sales history is preserved.</p>
               <div className="mt-5 flex justify-end gap-2">
                 <button onClick={() => setConfirmDel(null)} className="rounded-md border border-border px-3 py-2 text-sm">Cancel</button>
-                <button onClick={() => del.mutate(confirmDel.id)} className="rounded-md bg-destructive px-3 py-2 text-sm font-semibold text-destructive-foreground">Delete</button>
+                <button onClick={() => del.mutate(confirmDel.id)} className="rounded-md bg-destructive px-3 py-2 text-sm font-semibold text-destructive-foreground">Deactivate</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* restock modal */}
+      <AnimatePresence>
+        {restock && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setRestock(null)}>
+            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="w-full max-w-sm rounded-xl border border-border bg-card p-6" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-lg font-semibold">Restock — {restock.brand}</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Current stock: {restock.stock_quantity}</p>
+              <div className="mt-4 space-y-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Quantity to add</label>
+                  <input type="number" min={1} value={restockQty || ""} onChange={(e) => setRestockQty(Math.max(0, Number(e.target.value)))}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                </div>
+                {restockQty > 0 && (
+                  <p className="text-sm">New total: <span className="font-semibold">{restock.stock_quantity + restockQty}</span></p>
+                )}
+              </div>
+              <div className="mt-5 flex justify-end gap-2">
+                <button onClick={() => setRestock(null)} className="rounded-md border border-border px-3 py-2 text-sm">Cancel</button>
+                <button onClick={() => restockMutation.mutate({ id: restock.id, currentQty: restock.stock_quantity, qty: restockQty })}
+                  disabled={restockQty < 1 || restockMutation.isPending}
+                  className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
+                  {restockMutation.isPending ? "Adding…" : "Add Stock"}
+                </button>
               </div>
             </motion.div>
           </motion.div>

@@ -23,17 +23,28 @@ function SalesHistory() {
     queryFn: async () => {
       const fromIso = new Date(from + "T00:00:00").toISOString();
       const toIso = new Date(to + "T23:59:59").toISOString();
-      const [sales, items, profiles, products] = await Promise.all([
-        supabase.from("sales").select("*").gte("created_at", fromIso).lte("created_at", toIso).order("created_at", { ascending: false }),
-        supabase.from("sale_items").select("*"),
+
+      const [salesR, profilesR, productsR] = await Promise.all([
+        supabase.from("sales").select("*")
+          .gte("created_at", fromIso)
+          .lte("created_at", toIso)
+          .order("created_at", { ascending: false }),
         supabase.from("profiles").select("id,full_name,role,created_at"),
         supabase.from("products").select("id,brand,size"),
       ]);
+
+      const sales = (salesR.data ?? []) as Sale[];
+      const saleIds = sales.map((s) => s.id);
+
+      const itemsR = saleIds.length > 0
+        ? await supabase.from("sale_items").select("*").in("sale_id", saleIds)
+        : { data: [] };
+
       return {
-        sales: (sales.data ?? []) as Sale[],
-        items: (items.data ?? []) as SaleItem[],
-        profiles: (profiles.data ?? []) as Profile[],
-        products: (products.data ?? []) as Product[],
+        sales,
+        items: (itemsR.data ?? []) as SaleItem[],
+        profiles: (profilesR.data ?? []) as Profile[],
+        products: (productsR.data ?? []) as Product[],
       };
     },
   });
@@ -51,11 +62,19 @@ function SalesHistory() {
 
   const exportCsv = () => {
     if (!data) return;
-    const rows = [["Date", "Customer", "Seller", "Items", "Total KES"]];
+    const header = ["Date", "Customer", "Seller", "Product", "Size", "Quantity", "Subtotal (KES)", "Sale Total (KES)"];
+    const rows: string[][] = [header];
     for (const s of filtered) {
       const seller = data.profiles.find((p) => p.id === s.seller_id)?.full_name ?? "—";
       const its = data.items.filter((i) => i.sale_id === s.id);
-      rows.push([format(new Date(s.created_at), "yyyy-MM-dd HH:mm"), s.customer_name ?? "", seller, String(its.length), String(s.total_amount)]);
+      if (its.length === 0) {
+        rows.push([format(new Date(s.created_at), "yyyy-MM-dd HH:mm"), s.customer_name ?? "", seller, "—", "—", "0", "0", String(s.total_amount)]);
+      } else {
+        for (const i of its) {
+          const p = data.products.find((pp) => pp.id === i.product_id);
+          rows.push([format(new Date(s.created_at), "yyyy-MM-dd HH:mm"), s.customer_name ?? "", seller, p?.brand ?? "—", p?.size ?? "—", String(i.quantity), String(i.subtotal), String(s.total_amount)]);
+        }
+      }
     }
     const csv = rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });

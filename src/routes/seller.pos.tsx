@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Minus, Plus, ShoppingCart, X, Check, Printer } from "lucide-react";
+import { Minus, Plus, ShoppingCart, X, Check, Printer, Search, MessageCircle } from "lucide-react";
 import { format } from "date-fns";
 import { SellerLayout } from "@/components/seller/SellerLayout";
 import { supabase, type Product, type Category } from "@/integrations/supabase/client";
@@ -23,6 +23,7 @@ function POS() {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [customer, setCustomer] = useState("");
   const [catFilter, setCatFilter] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const [cartOpen, setCartOpen] = useState(false);
   const [confirmed, setConfirmed] = useState<null | {
     items: CartLine[]; total: number; at: Date; customer: string;
@@ -44,8 +45,13 @@ function POS() {
   });
 
   const visible = useMemo(
-    () => products.filter((p) => !catFilter || p.category_id === catFilter),
-    [products, catFilter]
+    () => products.filter((p) => {
+      if (catFilter && p.category_id !== catFilter) return false;
+      if (!search) return true;
+      const s = search.toLowerCase();
+      return [p.brand, p.grade, p.type, p.size].some((v) => (v ?? "").toLowerCase().includes(s));
+    }),
+    [products, catFilter, search]
   );
 
   const total = cart.reduce((a, l) => a + l.product.price * l.qty, 0);
@@ -121,7 +127,14 @@ function POS() {
       qc.invalidateQueries({ queryKey: ["seller-products"] });
       qc.invalidateQueries({ queryKey: ["my-sales"] });
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => {
+      const msg = (e.message ?? "").toLowerCase();
+      if (msg.includes("stock") || msg.includes("quantity") || msg.includes("exceed") || msg.includes("insufficient")) {
+        toast.error("Not enough stock available. Please refresh and try again.");
+      } else {
+        toast.error(e.message);
+      }
+    },
   });
 
   const catColor = (id: string | null) => {
@@ -134,6 +147,16 @@ function POS() {
       <div className="flex flex-col lg:flex-row">
         {/* product area */}
         <div className="flex-1 p-4 lg:p-6">
+          {/* search */}
+          <div className="relative mb-3">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by brand, grade, size…"
+              className="w-full rounded-md border border-input bg-background py-2 pl-9 pr-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
           {/* category tabs */}
           <div className="-mx-4 mb-4 flex gap-2 overflow-x-auto px-4 pb-2 lg:mx-0 lg:px-0">
             <Tab active={!catFilter} onClick={() => setCatFilter(null)}>All</Tab>
@@ -228,11 +251,20 @@ function POS() {
                   ))}
                 </div>
                 <div className="flex justify-between text-base font-bold"><span>Total</span><span>{formatKES(confirmed.total)}</span></div>
-                <div className="mt-5 flex gap-2">
-                  <button onClick={() => window.print()} className="flex-1 inline-flex items-center justify-center gap-1 rounded-md border border-border py-2 text-sm hover:bg-accent">
-                    <Printer className="h-4 w-4" /> Print
-                  </button>
-                  <button onClick={() => setConfirmed(null)} className="flex-1 rounded-md bg-primary py-2 text-sm font-semibold text-primary-foreground hover:bg-[#3a4f22]">New sale</button>
+                <div className="mt-5 space-y-2">
+                  <div className="flex gap-2">
+                    <button onClick={() => window.print()} className="flex-1 inline-flex items-center justify-center gap-1 rounded-md border border-border py-2 text-sm hover:bg-accent">
+                      <Printer className="h-4 w-4" /> Print
+                    </button>
+                    <button onClick={() => {
+                      const lines = confirmed.items.map((l) => `${l.product.brand} ×${l.qty}  ${formatKES(l.product.price * l.qty)}`).join("\n");
+                      const msg = `*AgriPOS Receipt*\n${confirmed.customer ? `Customer: ${confirmed.customer}\n` : ""}${format(confirmed.at, "MMM d, yyyy HH:mm")}\n\n${lines}\n\n*Total: ${formatKES(confirmed.total)}*`;
+                      window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
+                    }} className="flex-1 inline-flex items-center justify-center gap-1 rounded-md border border-border py-2 text-sm hover:bg-accent">
+                      <MessageCircle className="h-4 w-4" /> WhatsApp
+                    </button>
+                  </div>
+                  <button onClick={() => setConfirmed(null)} className="w-full rounded-md bg-primary py-2 text-sm font-semibold text-primary-foreground hover:bg-[#3a4f22]">New sale</button>
                 </div>
               </motion.div>
             </motion.div>
