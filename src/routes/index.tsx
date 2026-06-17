@@ -448,29 +448,87 @@ function Landing() {
       </section>
 
       {/* ── FOOTER ── */}
-      <footer
-        className="border-t border-border"
-        style={{
-          paddingTop: "clamp(64px, 8vw, 120px)",
-          paddingBottom: "clamp(64px, 8vw, 120px)",
-        }}
-      >
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 md:flex-row">
-          <div className="flex items-center gap-2">
-            <Sprout className="h-5 w-5 text-primary" />
-            <span className="font-semibold tracking-tight">AgriPOS</span>
-            <span className="ml-3 text-sm text-muted-foreground" style={{ fontSize: "0.875rem" }}>
-              Built for agricultural supply businesses
-            </span>
+      <footer className="border-t border-border bg-card">
+        <div className="mx-auto max-w-6xl px-6 py-16">
+          <div className="grid gap-10 md:grid-cols-3">
+
+            {/* Col 1 — Brand */}
+            <div>
+              <div className="mb-4 flex items-center gap-2">
+                <Sprout className="h-5 w-5 text-primary" />
+                <span className="text-lg font-semibold tracking-tight">AgriPOS</span>
+              </div>
+              <p className="text-sm leading-relaxed text-muted-foreground" style={{ maxWidth: "260px" }}>
+                A simple, powerful point-of-sale system built for agricultural
+                supply businesses across Kenya.
+              </p>
+              <div className="mt-6 flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-semibold text-primary">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary" />
+                  KES currency native
+                </span>
+              </div>
+            </div>
+
+            {/* Col 2 — Quick links */}
+            <div>
+              <p className="mb-4 text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Portals
+              </p>
+              <ul className="space-y-3">
+                <li>
+                  <Link to="/owner/login" className="text-sm text-foreground transition-colors duration-200 hover:text-primary">
+                    Owner Login — manage products & reports
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/seller/login" className="text-sm text-foreground transition-colors duration-200 hover:text-primary">
+                    Seller Login — process sales
+                  </Link>
+                </li>
+                <li>
+                  <a href="#features" className="text-sm text-foreground transition-colors duration-200 hover:text-primary">
+                    Features
+                  </a>
+                </li>
+                <li>
+                  <a href="#how-it-works" className="text-sm text-foreground transition-colors duration-200 hover:text-primary">
+                    How it works
+                  </a>
+                </li>
+              </ul>
+            </div>
+
+            {/* Col 3 — Categories */}
+            <div>
+              <p className="mb-4 text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Product categories
+              </p>
+              <ul className="grid grid-cols-2 gap-x-4 gap-y-2">
+                {["Calcium", "Fertilizers", "Kensalt", "Nevira", "Sacks", "Tents / Hema"].map((cat) => (
+                  <li key={cat} className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <span className="h-1 w-1 rounded-full bg-primary/50" />
+                    {cat}
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
-          <button
-            onClick={toggle}
-            aria-label="Toggle theme"
-            className="inline-flex items-center justify-center rounded-md border border-border text-foreground transition-colors duration-200 hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#283618]"
-            style={{ width: "44px", height: "44px" }}
-          >
-            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </button>
+
+          {/* Bottom bar */}
+          <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-border pt-6 sm:flex-row">
+            <p className="text-xs text-muted-foreground">
+              &copy; {new Date().getFullYear()} AgriPOS. Built for agricultural supply businesses.
+            </p>
+            <button
+              onClick={toggle}
+              aria-label="Toggle theme"
+              className="inline-flex items-center justify-center rounded-md border border-border text-foreground transition-colors duration-200 hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#283618]"
+              style={{ width: "40px", height: "40px" }}
+            >
+              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
+          </div>
         </div>
       </footer>
     </div>
