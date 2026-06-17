@@ -1,8 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
 import { format, startOfDay } from "date-fns";
-import { ChevronDown } from "lucide-react";
 import { SellerLayout } from "@/components/seller/SellerLayout";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase, type Sale, type SaleItem, type Product } from "@/integrations/supabase/client";
@@ -14,7 +12,6 @@ export const Route = createFileRoute("/seller/my-sales")({
 
 function MySales() {
   const { profile } = useAuth();
-  const [open, setOpen] = useState<string | null>(null);
 
   const { data } = useQuery({
     queryKey: ["my-sales", profile?.id],
@@ -62,28 +59,26 @@ function MySales() {
           )}
           {data?.sales.map((s) => {
             const its = data.items.filter((i) => i.sale_id === s.id);
-            const isOpen = open === s.id;
             return (
               <div key={s.id} className="border-b border-border last:border-0">
-                <button onClick={() => setOpen(isOpen ? null : s.id)} className="grid w-full grid-cols-[auto_1fr_auto_auto] items-center gap-3 px-4 py-3 text-left text-sm hover:bg-accent/20">
-                  <span className="text-muted-foreground">{format(new Date(s.created_at), "HH:mm")}</span>
-                  <span className="truncate">{s.customer_name ?? "—"}</span>
-                  <span className="text-xs text-muted-foreground">{its.length}</span>
-                  <span className="font-semibold tabular-nums flex items-center gap-1">{formatKES(s.total_amount)} <ChevronDown className={`h-3.5 w-3.5 transition ${isOpen ? "rotate-180" : ""}`} /></span>
-                </button>
-                {isOpen && (
-                  <div className="border-t border-border bg-accent/20 px-4 py-2 text-sm">
-                    {its.map((i) => {
-                      const p = data.products.find((pp) => pp.id === i.product_id);
-                      return (
-                        <div key={i.id} className="flex justify-between py-1">
-                          <span>{p ? `${p.brand}${p.size ? ` ${p.size}` : ""}` : "—"} × {i.quantity}</span>
-                          <span className="tabular-nums">{formatKES(i.subtotal)}</span>
-                        </div>
-                      );
-                    })}
+                <div className="flex items-center justify-between px-4 py-3 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">{format(new Date(s.created_at), "HH:mm")}</span>
+                    <span className="truncate">{s.customer_name ?? "—"}</span>
                   </div>
-                )}
+                  <span className="font-semibold tabular-nums">{formatKES(s.total_amount)}</span>
+                </div>
+                <div className="border-t border-border bg-accent/20 px-4 py-2 text-sm">
+                  {its.map((i) => {
+                    const p = data.products.find((pp) => pp.id === i.product_id);
+                    return (
+                      <div key={i.id} className="flex justify-between py-1">
+                        <span>{p ? `${p.brand}${p.size ? ` ${p.size}` : ""}` : "—"} × {i.quantity}</span>
+                        <span className="tabular-nums">{formatKES(i.subtotal)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             );
           })}
