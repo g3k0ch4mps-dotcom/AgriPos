@@ -450,7 +450,7 @@ function Landing() {
       {/* ── FOOTER ── */}
       <footer className="border-t border-border bg-card">
         <div className="mx-auto max-w-6xl px-6 py-16">
-          <div className="grid gap-10 md:grid-cols-3">
+          <div className="grid gap-10 md:grid-cols-2">
 
             {/* Col 1 — Brand */}
             <div>
@@ -496,21 +496,6 @@ function Landing() {
                     How it works
                   </a>
                 </li>
-              </ul>
-            </div>
-
-            {/* Col 3 — Categories */}
-            <div>
-              <p className="mb-4 text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                Product categories
-              </p>
-              <ul className="grid grid-cols-2 gap-x-4 gap-y-2">
-                {["Calcium", "Fertilizers", "Kensalt", "Nevira", "Sacks", "Tents / Hema"].map((cat) => (
-                  <li key={cat} className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <span className="h-1 w-1 rounded-full bg-primary/50" />
-                    {cat}
-                  </li>
-                ))}
               </ul>
             </div>
           </div>
