@@ -66,7 +66,7 @@ function Landing() {
         </AnimatePresence>
         <div
           className="absolute inset-0"
-          style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.35) 50%, rgba(0,0,0,0.7) 100%)" }}
+          style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.3) 40%, rgba(0,0,0,0.82) 100%)" }}
         />
 
         {/* Navbar */}
@@ -177,8 +177,8 @@ function Landing() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0 }}
-            className="rounded-full px-3.5 py-1.5 text-sm font-semibold uppercase tracking-[0.1em] text-white"
-            style={{ background: "rgba(40,54,24,0.85)", padding: "6px 14px", lineHeight: "1.5" }}
+            className="rounded-full px-3.5 py-1.5 font-semibold uppercase text-white"
+            style={{ background: "rgba(40,54,24,0.85)", padding: "6px 14px", lineHeight: "1.5", fontSize: "0.6875rem", letterSpacing: "0.14em", fontWeight: 600 }}
           >
             Agricultural POS System
           </motion.span>
@@ -188,12 +188,14 @@ function Landing() {
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.15 }}
-            className="font-bold text-white"
+            className="font-extrabold text-white"
             style={{
-              fontSize: "clamp(2.25rem, 5vw, 4rem)",
+              fontSize: "clamp(2.75rem, 6vw, 5rem)",
               lineHeight: 1.15,
               maxWidth: "720px",
-              margin: "0 auto",
+              margin: "20px auto 0",
+              letterSpacing: "-0.02em",
+              textShadow: "0 2px 20px rgba(0,0,0,0.4)",
             }}
           >
             Run your agri-supply shop
@@ -222,17 +224,16 @@ function Landing() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.45 }}
-            className="flex w-full flex-col items-center gap-3 sm:flex-row sm:justify-center sm:gap-4"
+            className="flex w-full flex-col items-center gap-3 sm:flex-row sm:justify-center sm:gap-4 sm:w-auto"
             style={{ marginTop: "40px" }}
           >
             <Link
               to="/owner/login"
-              className="inline-flex w-full items-center justify-center rounded-md border-2 border-white/90 bg-[#283618] px-8 text-base font-semibold text-white transition-all duration-200 hover:bg-[#3a4f22] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              className="inline-flex w-full sm:w-auto items-center justify-center rounded-md border-2 border-white/90 bg-[#283618] px-8 text-base font-semibold text-white transition-all duration-200 hover:bg-[#3a4f22] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               style={{
                 padding: "14px 32px",
                 minHeight: "56px",
                 boxShadow: "0 4px 24px rgba(0,0,0,0.35)",
-                maxWidth: "280px",
                 fontSize: "1rem",
               }}
             >
@@ -247,11 +248,10 @@ function Landing() {
 
             <Link
               to="/seller/login"
-              className="inline-flex w-full items-center justify-center rounded-md border-2 border-white bg-transparent px-8 text-base font-semibold text-white transition-all duration-200 hover:bg-white hover:text-[#283618] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              className="inline-flex w-full sm:w-auto items-center justify-center rounded-md border-2 border-white bg-transparent px-8 text-base font-semibold text-white transition-all duration-200 hover:bg-white hover:text-[#283618] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               style={{
                 padding: "14px 32px",
                 minHeight: "56px",
-                maxWidth: "280px",
                 fontSize: "1rem",
               }}
             >
@@ -306,7 +306,7 @@ function Landing() {
           {TRUST_ITEMS.map((item, i) => (
             <div key={i} className="flex items-center gap-2">
               <span className="text-sm font-medium text-white" style={{ fontSize: "0.875rem" }}>
-                \u2713 {item}
+                ✓ {item}
               </span>
               {i < TRUST_ITEMS.length - 1 && (
                 <span
@@ -331,6 +331,28 @@ function Landing() {
         }}
       >
         <div className="mx-auto max-w-6xl px-6">
+          <div style={{ marginBottom: "48px", textAlign: "center" }}>
+            <span style={{
+              display: "inline-block",
+              fontSize: "0.6875rem",
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.14em",
+              color: "var(--color-primary)",
+              marginBottom: "8px"
+            }}>
+              Why AgriPOS
+            </span>
+            <h2 style={{
+              fontSize: "clamp(1.5rem, 3vw, 2.25rem)",
+              fontWeight: 700,
+              lineHeight: 1.15,
+              letterSpacing: "-0.01em",
+              marginTop: "8px"
+            }}>
+              Built for the way agri-shops actually work.
+            </h2>
+          </div>
           <motion.div
             initial="hidden"
             whileInView="visible"
