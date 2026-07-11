@@ -10,7 +10,7 @@ import { format, subDays, startOfDay, startOfMonth, endOfMonth, subMonths, getHo
 import { TrendingUp, TrendingDown, Package, ShoppingBag, DollarSign, Boxes, Users } from "lucide-react";
 import { OwnerLayout } from "@/components/owner/OwnerLayout";
 import { supabase } from "@/integrations/supabase/client";
-import { formatKES } from "@/lib/format";
+import { formatKES, productName } from "@/lib/format";
 
 export const Route = createFileRoute("/owner/dashboard")({
   component: Dashboard,
@@ -102,7 +102,7 @@ function Dashboard() {
   const topProducts = Array.from(prodTotals.entries())
     .map(([pid, rev]) => {
       const p = products.find((x) => x.id === pid);
-      return { name: p ? `${p.brand}${p.size ? ` ${p.size}` : ""}` : "—", revenue: rev };
+      return { name: p ? `${productName(p)}${p.size ? ` ${p.size}` : ""}` : "—", revenue: rev };
     })
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 8);
@@ -291,7 +291,7 @@ function Dashboard() {
                   <div key={p.id} className="rounded-lg border border-border bg-card p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{p.brand}</p>
+                        <p className="truncate text-sm font-medium">{productName(p)}</p>
                         <p className="text-xs text-muted-foreground">{p.size ?? "—"}</p>
                       </div>
                       {low && !out && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-700 animate-slow-pulse dark:bg-amber-900/40 dark:text-amber-300">Low</span>}

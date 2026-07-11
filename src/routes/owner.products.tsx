@@ -5,7 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Search, Pencil, Trash2, X, PackagePlus } from "lucide-react";
 import { OwnerLayout } from "@/components/owner/OwnerLayout";
 import { supabase, type Product, type Category } from "@/integrations/supabase/client";
-import { formatKES } from "@/lib/format";
+import { formatKES, productName } from "@/lib/format";
+import { HoverTip } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/owner/products")({
@@ -41,7 +42,7 @@ function Products() {
     mutationFn: async (d: Draft) => {
       const payload = {
         category_id: d.category_id ?? null,
-        brand: d.brand ?? "",
+        brand: d.brand || null,
         grade: d.grade ?? null,
         type: d.type ?? null,
         size: d.size ?? null,
@@ -156,7 +157,7 @@ function Products() {
               return (
                 <tr key={p.id} className="border-b border-border last:border-0 hover:bg-accent/20">
                   <td className="px-4 py-3 text-muted-foreground">{catName(p.category_id)}</td>
-                  <td className="px-4 py-3 font-medium">{p.brand}</td>
+                  <td className="px-4 py-3 font-medium">{productName(p)}</td>
                   <td className="px-4 py-3">{p.grade ?? "—"}</td>
                   <td className="px-4 py-3">{p.type ?? "—"}</td>
                   <td className="px-4 py-3">{p.size ?? "—"}</td>
@@ -173,9 +174,15 @@ function Products() {
                     </button>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button onClick={() => { setRestock(p); setRestockQty(0); }} className="rounded p-1.5 hover:bg-accent text-emerald-600"><PackagePlus className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => setEditing(p)} className="rounded p-1.5 hover:bg-accent"><Pencil className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => setConfirmDel(p)} className="rounded p-1.5 hover:bg-accent text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>
+                    <HoverTip label="Restock">
+                      <button onClick={() => { setRestock(p); setRestockQty(0); }} className="rounded p-1.5 hover:bg-accent text-emerald-600"><PackagePlus className="h-3.5 w-3.5" /></button>
+                    </HoverTip>
+                    <HoverTip label="Edit product">
+                      <button onClick={() => setEditing(p)} className="rounded p-1.5 hover:bg-accent"><Pencil className="h-3.5 w-3.5" /></button>
+                    </HoverTip>
+                    <HoverTip label="Deactivate product">
+                      <button onClick={() => setConfirmDel(p)} className="rounded p-1.5 hover:bg-accent text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>
+                    </HoverTip>
                   </td>
                 </tr>
               );
@@ -193,7 +200,7 @@ function Products() {
             <div key={p.id} className="rounded-lg border border-border bg-card p-4">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="font-medium">{p.brand} {p.size && <span className="text-muted-foreground">· {p.size}</span>}</p>
+                  <p className="font-medium">{productName(p)} {p.size && <span className="text-muted-foreground">· {p.size}</span>}</p>
                   <p className="text-xs text-muted-foreground">{catName(p.category_id)} · {p.grade ?? "—"}</p>
                 </div>
                 <p className="font-semibold">{formatKES(p.price)}</p>
@@ -231,7 +238,7 @@ function Products() {
                     {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </Field>
-                <Field label="Brand"><Input value={editing.brand ?? ""} onChange={(v) => setEditing({ ...editing, brand: v })} required /></Field>
+                <Field label="Brand (optional)"><Input value={editing.brand ?? ""} onChange={(v) => setEditing({ ...editing, brand: v })} /></Field>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Grade"><Input value={editing.grade ?? ""} onChange={(v) => setEditing({ ...editing, grade: v })} /></Field>
                   <Field label="Type"><Input value={editing.type ?? ""} onChange={(v) => setEditing({ ...editing, type: v })} /></Field>
@@ -261,7 +268,7 @@ function Products() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setConfirmDel(null)}>
             <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="w-full max-w-sm rounded-xl border border-border bg-card p-6" onClick={(e) => e.stopPropagation()}>
               <h3 className="text-lg font-semibold">Deactivate product?</h3>
-              <p className="mt-2 text-sm text-muted-foreground">"{confirmDel.brand}" will be hidden from POS but sales history is preserved.</p>
+              <p className="mt-2 text-sm text-muted-foreground">"{productName(confirmDel)}" will be hidden from POS but sales history is preserved.</p>
               <div className="mt-5 flex justify-end gap-2">
                 <button onClick={() => setConfirmDel(null)} className="rounded-md border border-border px-3 py-2 text-sm">Cancel</button>
                 <button onClick={() => del.mutate(confirmDel.id)} className="rounded-md bg-destructive px-3 py-2 text-sm font-semibold text-destructive-foreground">Deactivate</button>
@@ -276,7 +283,7 @@ function Products() {
         {restock && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setRestock(null)}>
             <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="w-full max-w-sm rounded-xl border border-border bg-card p-6" onClick={(e) => e.stopPropagation()}>
-              <h3 className="text-lg font-semibold">Restock — {restock.brand}</h3>
+              <h3 className="text-lg font-semibold">Restock — {productName(restock)}</h3>
               <p className="mt-1 text-sm text-muted-foreground">Current stock: {restock.stock_quantity}</p>
               <div className="mt-4 space-y-3">
                 <div>

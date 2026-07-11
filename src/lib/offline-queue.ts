@@ -3,6 +3,8 @@ export type QueuedSale = {
   customer_name: string;
   items: { product_id: string; quantity: number }[];
   total: number;
+  payment_method?: "cash" | "mpesa";
+  mpesa_code?: string;
   queued_at: string;
 };
 

@@ -13,8 +13,10 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as SellerPosRouteImport } from './routes/seller.pos'
 import { Route as SellerMySalesRouteImport } from './routes/seller.my-sales'
 import { Route as SellerLoginRouteImport } from './routes/seller.login'
+import { Route as OwnerStaffRouteImport } from './routes/owner.staff'
 import { Route as OwnerSettingsRouteImport } from './routes/owner.settings'
 import { Route as OwnerSalesHistoryRouteImport } from './routes/owner.sales-history'
+import { Route as OwnerReportsRouteImport } from './routes/owner.reports'
 import { Route as OwnerProductsRouteImport } from './routes/owner.products'
 import { Route as OwnerLoginRouteImport } from './routes/owner.login'
 import { Route as OwnerDashboardRouteImport } from './routes/owner.dashboard'
@@ -40,6 +42,11 @@ const SellerLoginRoute = SellerLoginRouteImport.update({
   path: '/seller/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OwnerStaffRoute = OwnerStaffRouteImport.update({
+  id: '/owner/staff',
+  path: '/owner/staff',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OwnerSettingsRoute = OwnerSettingsRouteImport.update({
   id: '/owner/settings',
   path: '/owner/settings',
@@ -48,6 +55,11 @@ const OwnerSettingsRoute = OwnerSettingsRouteImport.update({
 const OwnerSalesHistoryRoute = OwnerSalesHistoryRouteImport.update({
   id: '/owner/sales-history',
   path: '/owner/sales-history',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OwnerReportsRoute = OwnerReportsRouteImport.update({
+  id: '/owner/reports',
+  path: '/owner/reports',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OwnerProductsRoute = OwnerProductsRouteImport.update({
@@ -77,8 +89,10 @@ export interface FileRoutesByFullPath {
   '/owner/dashboard': typeof OwnerDashboardRoute
   '/owner/login': typeof OwnerLoginRoute
   '/owner/products': typeof OwnerProductsRoute
+  '/owner/reports': typeof OwnerReportsRoute
   '/owner/sales-history': typeof OwnerSalesHistoryRoute
   '/owner/settings': typeof OwnerSettingsRoute
+  '/owner/staff': typeof OwnerStaffRoute
   '/seller/login': typeof SellerLoginRoute
   '/seller/my-sales': typeof SellerMySalesRoute
   '/seller/pos': typeof SellerPosRoute
@@ -89,8 +103,10 @@ export interface FileRoutesByTo {
   '/owner/dashboard': typeof OwnerDashboardRoute
   '/owner/login': typeof OwnerLoginRoute
   '/owner/products': typeof OwnerProductsRoute
+  '/owner/reports': typeof OwnerReportsRoute
   '/owner/sales-history': typeof OwnerSalesHistoryRoute
   '/owner/settings': typeof OwnerSettingsRoute
+  '/owner/staff': typeof OwnerStaffRoute
   '/seller/login': typeof SellerLoginRoute
   '/seller/my-sales': typeof SellerMySalesRoute
   '/seller/pos': typeof SellerPosRoute
@@ -102,8 +118,10 @@ export interface FileRoutesById {
   '/owner/dashboard': typeof OwnerDashboardRoute
   '/owner/login': typeof OwnerLoginRoute
   '/owner/products': typeof OwnerProductsRoute
+  '/owner/reports': typeof OwnerReportsRoute
   '/owner/sales-history': typeof OwnerSalesHistoryRoute
   '/owner/settings': typeof OwnerSettingsRoute
+  '/owner/staff': typeof OwnerStaffRoute
   '/seller/login': typeof SellerLoginRoute
   '/seller/my-sales': typeof SellerMySalesRoute
   '/seller/pos': typeof SellerPosRoute
@@ -116,8 +134,10 @@ export interface FileRouteTypes {
     | '/owner/dashboard'
     | '/owner/login'
     | '/owner/products'
+    | '/owner/reports'
     | '/owner/sales-history'
     | '/owner/settings'
+    | '/owner/staff'
     | '/seller/login'
     | '/seller/my-sales'
     | '/seller/pos'
@@ -128,8 +148,10 @@ export interface FileRouteTypes {
     | '/owner/dashboard'
     | '/owner/login'
     | '/owner/products'
+    | '/owner/reports'
     | '/owner/sales-history'
     | '/owner/settings'
+    | '/owner/staff'
     | '/seller/login'
     | '/seller/my-sales'
     | '/seller/pos'
@@ -140,8 +162,10 @@ export interface FileRouteTypes {
     | '/owner/dashboard'
     | '/owner/login'
     | '/owner/products'
+    | '/owner/reports'
     | '/owner/sales-history'
     | '/owner/settings'
+    | '/owner/staff'
     | '/seller/login'
     | '/seller/my-sales'
     | '/seller/pos'
@@ -153,8 +177,10 @@ export interface RootRouteChildren {
   OwnerDashboardRoute: typeof OwnerDashboardRoute
   OwnerLoginRoute: typeof OwnerLoginRoute
   OwnerProductsRoute: typeof OwnerProductsRoute
+  OwnerReportsRoute: typeof OwnerReportsRoute
   OwnerSalesHistoryRoute: typeof OwnerSalesHistoryRoute
   OwnerSettingsRoute: typeof OwnerSettingsRoute
+  OwnerStaffRoute: typeof OwnerStaffRoute
   SellerLoginRoute: typeof SellerLoginRoute
   SellerMySalesRoute: typeof SellerMySalesRoute
   SellerPosRoute: typeof SellerPosRoute
@@ -190,6 +216,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SellerLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/owner/staff': {
+      id: '/owner/staff'
+      path: '/owner/staff'
+      fullPath: '/owner/staff'
+      preLoaderRoute: typeof OwnerStaffRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/owner/settings': {
       id: '/owner/settings'
       path: '/owner/settings'
@@ -202,6 +235,13 @@ declare module '@tanstack/react-router' {
       path: '/owner/sales-history'
       fullPath: '/owner/sales-history'
       preLoaderRoute: typeof OwnerSalesHistoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/owner/reports': {
+      id: '/owner/reports'
+      path: '/owner/reports'
+      fullPath: '/owner/reports'
+      preLoaderRoute: typeof OwnerReportsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/owner/products': {
@@ -241,8 +281,10 @@ const rootRouteChildren: RootRouteChildren = {
   OwnerDashboardRoute: OwnerDashboardRoute,
   OwnerLoginRoute: OwnerLoginRoute,
   OwnerProductsRoute: OwnerProductsRoute,
+  OwnerReportsRoute: OwnerReportsRoute,
   OwnerSalesHistoryRoute: OwnerSalesHistoryRoute,
   OwnerSettingsRoute: OwnerSettingsRoute,
+  OwnerStaffRoute: OwnerStaffRoute,
   SellerLoginRoute: SellerLoginRoute,
   SellerMySalesRoute: SellerMySalesRoute,
   SellerPosRoute: SellerPosRoute,

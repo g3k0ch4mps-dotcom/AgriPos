@@ -5,6 +5,7 @@ import { Plus, Trash2, Package } from "lucide-react";
 import { OwnerLayout } from "@/components/owner/OwnerLayout";
 import { supabase, type Category } from "@/integrations/supabase/client";
 import { formatKES } from "@/lib/format";
+import { HoverTip } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/owner/categories")({
@@ -85,7 +86,9 @@ function Categories() {
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-xs tabular-nums text-muted-foreground">{formatKES(c.revenue)}</span>
-                <button onClick={() => del.mutate(c.id)} className="rounded p-1.5 text-destructive hover:bg-accent"><Trash2 className="h-4 w-4" /></button>
+                <HoverTip label="Delete category">
+                  <button onClick={() => del.mutate(c.id)} className="rounded p-1.5 text-destructive hover:bg-accent"><Trash2 className="h-4 w-4" /></button>
+                </HoverTip>
               </div>
             </div>
           ))}

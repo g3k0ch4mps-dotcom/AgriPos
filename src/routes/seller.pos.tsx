@@ -3,13 +3,23 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Minus, Plus, ShoppingCart, X, Check, Printer, Search, MessageCircle } from "lucide-react";
-import { format } from "date-fns";
+import { format, addDays } from "date-fns";
 import { SellerLayout } from "@/components/seller/SellerLayout";
-import { supabase, type Product, type Category } from "@/integrations/supabase/client";
-import { formatKES } from "@/lib/format";
+import { supabase, type Product, type Category, type Customer } from "@/integrations/supabase/client";
+import { formatKES, productName } from "@/lib/format";
+import { HoverTip } from "@/components/ui/tooltip";
 import { useOnline } from "@/hooks/use-online";
 import { enqueue, getQueue, dequeue } from "@/lib/offline-queue";
 import { toast } from "sonner";
+
+type PaymentMethod = "cash" | "mpesa" | "loan";
+type PaymentDetails = {
+  method: PaymentMethod;
+  mpesaCode?: string;
+  loanCustomerId?: string;
+  newCustomer?: { full_name: string; phone: string; national_id?: string };
+  dueDate?: string;
+};
 
 export const Route = createFileRoute("/seller/pos")({
   component: POS,
@@ -26,7 +36,7 @@ function POS() {
   const [search, setSearch] = useState("");
   const [cartOpen, setCartOpen] = useState(false);
   const [confirmed, setConfirmed] = useState<null | {
-    items: CartLine[]; total: number; at: Date; customer: string;
+    items: CartLine[]; total: number; at: Date; customer: string; payment: PaymentDetails;
   }>(null);
 
   const { data: products = [] } = useQuery({
@@ -41,6 +51,13 @@ function POS() {
     queryFn: async () => {
       const { data } = await supabase.from("categories").select("*").order("name");
       return (data ?? []) as Category[];
+    },
+  });
+  const { data: customers = [] } = useQuery({
+    queryKey: ["customers"],
+    queryFn: async () => {
+      const { data } = await supabase.from("customers").select("*").order("full_name");
+      return (data ?? []) as Customer[];
     },
   });
 
@@ -91,6 +108,8 @@ function POS() {
           const { error } = await supabase.rpc("create_sale", {
             p_customer_name: sale.customer_name,
             p_items: sale.items,
+            p_payment_method: sale.payment_method ?? "cash",
+            p_mpesa_code: sale.mpesa_code ?? null,
           });
           if (!error) {
             dequeue(sale.id);
@@ -107,25 +126,42 @@ function POS() {
   }, [online]);
 
   const confirm = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (payment: PaymentDetails) => {
       const items = cart.map((l) => ({ product_id: l.product.id, quantity: l.qty }));
 
       if (!online) {
-        enqueue({ customer_name: customer, items, total });
+        // Loans need a live customer lookup, so the UI disables that option
+        // while offline \u2014 only cash/mpesa ever reach this branch.
+        enqueue({
+          customer_name: customer,
+          items,
+          total,
+          payment_method: payment.method === "loan" ? "cash" : payment.method,
+          mpesa_code: payment.method === "mpesa" ? payment.mpesaCode : undefined,
+        });
         return;
       }
 
-      const { error } = await supabase.rpc("create_sale", { p_customer_name: customer, p_items: items });
+      const { error } = await supabase.rpc("create_sale", {
+        p_customer_name: customer,
+        p_items: items,
+        p_payment_method: payment.method,
+        p_mpesa_code: payment.method === "mpesa" ? (payment.mpesaCode || null) : null,
+        p_customer_id: payment.method === "loan" ? (payment.loanCustomerId ?? null) : null,
+        p_new_customer: payment.method === "loan" && payment.newCustomer ? payment.newCustomer : null,
+        p_due_date: payment.method === "loan" ? (payment.dueDate ?? null) : null,
+      });
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, payment) => {
       if (!online) {
         toast.warning("No internet \u2014 sale saved locally and will sync when you\u2019re back online.");
       }
-      setConfirmed({ items: cart, total, at: new Date(), customer });
+      setConfirmed({ items: cart, total, at: new Date(), customer, payment });
       setCart([]); setCustomer(""); setCartOpen(false);
       qc.invalidateQueries({ queryKey: ["seller-products"] });
       qc.invalidateQueries({ queryKey: ["my-sales"] });
+      qc.invalidateQueries({ queryKey: ["customers"] });
     },
     onError: (e: any) => {
       const msg = (e.message ?? "").toLowerCase();
@@ -180,7 +216,7 @@ function POS() {
                     <span className="h-2 w-2 rounded-full" style={{ background: catColor(p.category_id) }} />
                     <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{categories.find((c) => c.id === p.category_id)?.name ?? "—"}</span>
                   </div>
-                  <p className="text-sm font-medium leading-tight">{p.brand}</p>
+                  <p className="text-sm font-medium leading-tight">{productName(p)}</p>
                   <p className="text-xs text-muted-foreground">{p.grade ?? ""}</p>
                   {p.size && <span className="mt-1 inline-block w-fit rounded-md bg-accent px-1.5 py-0.5 text-[10px] font-semibold text-primary">{p.size}</span>}
                   <p className="mt-2 text-lg font-bold tracking-tight">{formatKES(p.price)}</p>
@@ -197,7 +233,8 @@ function POS() {
             cart={cart} customer={customer} setCustomer={setCustomer}
             total={total} updateQty={updateQty}
             removeItem={(id) => setCart((c) => c.filter((l) => l.product.id !== id))}
-            confirm={() => confirm.mutate()} busy={confirm.isPending}
+            confirm={(payment) => confirm.mutate(payment)} busy={confirm.isPending}
+            online={online} customers={customers}
           />
         </aside>
 
@@ -224,7 +261,8 @@ function POS() {
                   cart={cart} customer={customer} setCustomer={setCustomer}
                   total={total} updateQty={updateQty}
                   removeItem={(id) => setCart((c) => c.filter((l) => l.product.id !== id))}
-                  confirm={() => confirm.mutate()} busy={confirm.isPending}
+                  confirm={(payment) => confirm.mutate(payment)} busy={confirm.isPending}
+                  online={online} customers={customers}
                 />
               </motion.div>
             </>
@@ -235,17 +273,30 @@ function POS() {
         <AnimatePresence>
           {confirmed && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="w-full max-w-sm rounded-2xl bg-card p-6">
+              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="relative w-full max-w-sm rounded-2xl bg-card p-6">
+                <HoverTip label="Close">
+                  <button onClick={() => setConfirmed(null)} aria-label="Close" className="absolute right-4 top-4 text-muted-foreground hover:text-foreground">
+                    <X className="h-5 w-5" />
+                  </button>
+                </HoverTip>
                 <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", duration: 0.6 }} className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground">
                   <Check className="h-7 w-7" />
                 </motion.div>
                 <h2 className="text-center text-lg font-semibold">Sale confirmed</h2>
                 <p className="mt-1 text-center text-xs text-muted-foreground">{format(confirmed.at, "MMM d, yyyy · HH:mm")}</p>
                 {confirmed.customer && <p className="mt-1 text-center text-sm">Customer: {confirmed.customer}</p>}
+                <p className="mt-1 text-center text-sm">
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${confirmed.payment.method === "loan" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" : "bg-primary/15 text-primary"}`}>
+                    {confirmed.payment.method === "mpesa" ? "M-Pesa" : confirmed.payment.method === "loan" ? "Loan" : "Cash"}
+                  </span>
+                </p>
+                {confirmed.payment.method === "loan" && confirmed.payment.dueDate && (
+                  <p className="mt-1 text-center text-xs text-muted-foreground">Due {format(new Date(confirmed.payment.dueDate), "MMM d, yyyy")}</p>
+                )}
                 <div className="my-4 border-y border-border py-3 text-sm">
                   {confirmed.items.map((l) => (
                     <div key={l.product.id} className="flex justify-between py-1">
-                      <span>{l.product.brand} × {l.qty}</span>
+                      <span>{productName(l.product)} × {l.qty}</span>
                       <span className="tabular-nums">{formatKES(l.product.price * l.qty)}</span>
                     </div>
                   ))}
@@ -257,7 +308,7 @@ function POS() {
                       <Printer className="h-4 w-4" /> Print
                     </button>
                     <button onClick={() => {
-                      const lines = confirmed.items.map((l) => `${l.product.brand} ×${l.qty}  ${formatKES(l.product.price * l.qty)}`).join("\n");
+                      const lines = confirmed.items.map((l) => `${productName(l.product)} ×${l.qty}  ${formatKES(l.product.price * l.qty)}`).join("\n");
                       const msg = `*AgriPOS Receipt*\n${confirmed.customer ? `Customer: ${confirmed.customer}\n` : ""}${format(confirmed.at, "MMM d, yyyy HH:mm")}\n\n${lines}\n\n*Total: ${formatKES(confirmed.total)}*`;
                       window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
                     }} className="flex-1 inline-flex items-center justify-center gap-1 rounded-md border border-border py-2 text-sm hover:bg-accent">
@@ -289,12 +340,53 @@ function Tab({ active, onClick, children }: { active: boolean; onClick: () => vo
 }
 
 function CartPanel({
-  cart, customer, setCustomer, total, updateQty, removeItem, confirm, busy,
+  cart, customer, setCustomer, total, updateQty, removeItem, confirm, busy, online, customers,
 }: {
   cart: CartLine[]; customer: string; setCustomer: (s: string) => void;
   total: number; updateQty: (id: string, d: number) => void;
-  removeItem: (id: string) => void; confirm: () => void; busy: boolean;
+  removeItem: (id: string) => void; confirm: (payment: PaymentDetails) => void; busy: boolean;
+  online: boolean; customers: Customer[];
 }) {
+  const [method, setMethod] = useState<PaymentMethod>("cash");
+  const [mpesaCode, setMpesaCode] = useState("");
+  const [loanMode, setLoanMode] = useState<"existing" | "new">("existing");
+  const [loanCustomerId, setLoanCustomerId] = useState<string | null>(null);
+  const [loanSearch, setLoanSearch] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newPhone, setNewPhone] = useState("");
+  const [newNationalId, setNewNationalId] = useState("");
+  const [dueDate, setDueDate] = useState(() => format(addDays(new Date(), 30), "yyyy-MM-dd"));
+
+  // Reset the payment form once the cart empties out (after a successful sale).
+  useEffect(() => {
+    if (cart.length !== 0) return;
+    setMethod("cash"); setMpesaCode(""); setLoanMode("existing"); setLoanCustomerId(null);
+    setLoanSearch(""); setNewName(""); setNewPhone(""); setNewNationalId("");
+    setDueDate(format(addDays(new Date(), 30), "yyyy-MM-dd"));
+  }, [cart.length]);
+
+  const filteredCustomers = customers.filter((c) => {
+    if (!loanSearch) return true;
+    const s = loanSearch.toLowerCase();
+    return c.full_name.toLowerCase().includes(s) || (c.phone ?? "").includes(loanSearch);
+  });
+
+  const canSubmit = method !== "loan" || (
+    !!dueDate && (loanMode === "existing" ? !!loanCustomerId : (newName.trim().length > 0 && newPhone.trim().length > 0))
+  );
+
+  const onConfirm = () => {
+    confirm({
+      method,
+      mpesaCode: method === "mpesa" ? (mpesaCode.trim() || undefined) : undefined,
+      loanCustomerId: method === "loan" && loanMode === "existing" ? (loanCustomerId ?? undefined) : undefined,
+      newCustomer: method === "loan" && loanMode === "new"
+        ? { full_name: newName.trim(), phone: newPhone.trim(), national_id: newNationalId.trim() || undefined }
+        : undefined,
+      dueDate: method === "loan" ? dueDate : undefined,
+    });
+  };
+
   return (
     <div>
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Current sale</h2>
@@ -307,7 +399,7 @@ function CartPanel({
           {cart.map((l) => (
             <div key={l.product.id} className="flex items-center gap-2 rounded-lg border border-border bg-background p-2.5">
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{l.product.brand}</p>
+                <p className="truncate text-sm font-medium">{productName(l.product)}</p>
                 <p className="text-xs text-muted-foreground">{formatKES(l.product.price)} ea</p>
               </div>
               <div className="flex items-center gap-1.5">
@@ -316,7 +408,9 @@ function CartPanel({
                 <button onClick={() => updateQty(l.product.id, 1)} className="rounded-md border border-border p-1"><Plus className="h-3 w-3" /></button>
               </div>
               <span className="w-20 text-right text-sm font-semibold tabular-nums">{formatKES(l.product.price * l.qty)}</span>
-              <button onClick={() => removeItem(l.product.id)} className="text-muted-foreground hover:text-destructive"><X className="h-4 w-4" /></button>
+              <HoverTip label="Remove item">
+                <button onClick={() => removeItem(l.product.id)} className="text-muted-foreground hover:text-destructive"><X className="h-4 w-4" /></button>
+              </HoverTip>
             </div>
           ))}
         </div>
@@ -327,14 +421,100 @@ function CartPanel({
         <input value={customer} onChange={(e) => setCustomer(e.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
       </div>
 
+      <div className="mt-4">
+        <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">Payment method</label>
+        <div className="grid grid-cols-3 gap-2">
+          {(["cash", "mpesa", "loan"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              disabled={m === "loan" && !online}
+              onClick={() => setMethod(m)}
+              className={`rounded-md border px-2 py-2 text-xs font-semibold uppercase tracking-wide transition ${
+                method === m ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background hover:bg-accent"
+              } ${m === "loan" && !online ? "cursor-not-allowed opacity-40" : ""}`}
+            >
+              {m === "mpesa" ? "M-Pesa" : m === "loan" ? "Loan" : "Cash"}
+            </button>
+          ))}
+        </div>
+        {method === "loan" && !online && (
+          <p className="mt-1.5 text-[11px] text-amber-600">Loans need an internet connection.</p>
+        )}
+      </div>
+
+      {method === "mpesa" && (
+        <div className="mt-3">
+          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">M-Pesa code (optional)</label>
+          <input value={mpesaCode} onChange={(e) => setMpesaCode(e.target.value)} placeholder="e.g. QJ7X1ABCD2" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+        </div>
+      )}
+
+      {method === "loan" && (
+        <div className="mt-3 space-y-3 rounded-lg border border-dashed border-border p-3">
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setLoanMode("existing")}
+              className={`flex-1 rounded-md px-2 py-1.5 text-xs font-semibold ${loanMode === "existing" ? "bg-primary text-primary-foreground" : "bg-accent text-muted-foreground"}`}>
+              Existing client
+            </button>
+            <button type="button" onClick={() => setLoanMode("new")}
+              className={`flex-1 rounded-md px-2 py-1.5 text-xs font-semibold ${loanMode === "new" ? "bg-primary text-primary-foreground" : "bg-accent text-muted-foreground"}`}>
+              New client
+            </button>
+          </div>
+
+          {loanMode === "existing" ? (
+            <div>
+              <input
+                value={loanSearch}
+                onChange={(e) => { setLoanSearch(e.target.value); setLoanCustomerId(null); }}
+                placeholder="Search client by name or phone…"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              />
+              <div className="mt-2 max-h-32 space-y-1 overflow-y-auto">
+                {filteredCustomers.length === 0 && (
+                  <p className="py-2 text-center text-xs text-muted-foreground">No clients found — switch to "New client".</p>
+                )}
+                {filteredCustomers.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setLoanCustomerId(c.id)}
+                    className={`w-full rounded-md border px-2.5 py-1.5 text-left text-xs ${loanCustomerId === c.id ? "border-primary bg-primary/10" : "border-border hover:bg-accent"}`}
+                  >
+                    <span className="font-medium">{c.full_name}</span>
+                    {c.phone && <span className="text-muted-foreground"> · {c.phone}</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Client full name" required
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+              <input value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="Phone number (for follow-up)" required
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+              <input value={newNationalId} onChange={(e) => setNewNationalId(e.target.value)} placeholder="National ID (optional)"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+            </div>
+          )}
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">Due date</label>
+            <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+          </div>
+        </div>
+      )}
+
       <div className="mt-5 flex items-center justify-between border-t border-border pt-4">
         <span className="text-sm text-muted-foreground">Total</span>
         <span className="text-2xl font-bold tracking-tight">{formatKES(total)}</span>
       </div>
 
       <button
-        onClick={confirm}
-        disabled={cart.length === 0 || busy}
+        onClick={onConfirm}
+        disabled={cart.length === 0 || busy || !canSubmit}
         className="mt-4 w-full rounded-md bg-primary py-3.5 text-sm font-bold text-primary-foreground transition active:scale-[0.97] hover:bg-[#3a4f22] disabled:opacity-50"
       >
         {busy ? "Processing…" : "Confirm Sale"}

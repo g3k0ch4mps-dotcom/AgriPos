@@ -4,7 +4,7 @@ import { format, startOfDay } from "date-fns";
 import { SellerLayout } from "@/components/seller/SellerLayout";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase, type Sale, type SaleItem, type Product } from "@/integrations/supabase/client";
-import { formatKES } from "@/lib/format";
+import { formatKES, productName } from "@/lib/format";
 
 export const Route = createFileRoute("/seller/my-sales")({
   component: MySales,
@@ -73,7 +73,7 @@ function MySales() {
                     const p = data.products.find((pp) => pp.id === i.product_id);
                     return (
                       <div key={i.id} className="flex justify-between py-1">
-                        <span>{p ? `${p.brand}${p.size ? ` ${p.size}` : ""}` : "—"} × {i.quantity}</span>
+                        <span>{p ? `${productName(p)}${p.size ? ` ${p.size}` : ""}` : "—"} × {i.quantity}</span>
                         <span className="tabular-nums">{formatKES(i.subtotal)}</span>
                       </div>
                     );
