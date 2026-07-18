@@ -1,174 +1,72 @@
-# AgriPOS — Full Handoff Document
+# AgriPOS — Handoff / Conversation Pickup Doc
+
+Last updated: 2026-07-12. Read this first in any new session before touching the DB or deployment again.
 
 ## Project
-- **Repo:** `c:\Users\kaito_netsuro\Project\agriharvest`
-- **Framework:** TanStack Start (Vite + Nitro SSR), React, TypeScript
-- **Supabase Project:** `https://hybmotfjgaepnxpixbrs.supabase.co`
 
----
+- **Repo (local):** `C:\Users\kaito_netsuro\Project\agriharvest`
+- **GitHub (origin):** `https://github.com/g3k0ch4mps-dotcom/AgriPos`
+- **GitHub (fork, deploys from here):** `https://github.com/suziednls-ux/AgriPos` — Cloudflare builds off this fork, not origin. Any fix pushed to origin needs **Sync fork** on the fork's GitHub page before Cloudflare picks it up.
+- **Framework:** TanStack Start (Vite + Nitro SSR), React, TypeScript
+- **Supabase project:** `https://hybmotfjgaepnxpixbrs.supabase.co`
+- **Live URL:** `https://agripos.suziednls.workers.dev/`
 
 ## Credentials
 
-### `.env` (already set, gitignored — values live only in that file, not here)
-```
-VITE_SUPABASE_URL=https://hybmotfjgaepnxpixbrs.supabase.co
-VITE_SUPABASE_ANON_KEY=<see .env>
-SUPABASE_SERVICE_ROLE_KEY=<see .env>
-```
+`.env` is gitignored, values live only there. Owner login:
+- URL: `/owner/login`
+- Email: `admin@info.com`
+- Password: `Admin@2020`
 
-### Admin (Owner) Login
-- **URL:** `http://localhost:8080/owner/login`
-- **Email:** `admin@info.com`
-- **Password:** `Admin@2020`
-- The admin profile is in the `profiles` table with `role = 'owner'` (confirmed via script)
+## Database — status: fixed, migrations already run
 
----
+The Supabase project was **not fresh** — it still had tables/constraints/policies from a previous, unrelated "cashier" POS app. Three SQL files in the repo root fixed this, **already run against the live DB**, safe to re-run (all idempotent) if anything regresses:
 
-## What Was Built
+1. `fix-rls.sql` — fixed `handle_new_user` trigger (role + email), added `profiles.phone`, renamed legacy `products` columns (`selling_price→price`, `current_stock→stock_quantity`, `minimum_stock→low_stock_threshold`), fixed a stale `profiles_role_check` CHECK constraint that only allowed old role values, rebuilt `profiles` RLS policies.
+2. `fix-legacy-policies.sql` — same "leftover policy referencing a nonexistent `get_user_role()` function" problem also existed on `categories`/`products`/`sale_items` (not just `profiles`) — dropped and rebuilt those too. Also drops a duplicate `create_sale()` overload (see next point).
+3. `add-loans-schema.sql` — adds `customers`, `loans`, `loan_payments` tables + extends `create_sale()` + adds `record_loan_payment()`.
 
-### 1. Staff Management (`/owner/staff`)
-**File:** `src/routes/owner.staff.tsx`  
-**Nav:** Added "Staff" link in `src/components/owner/OwnerLayout.tsx`
+**Gotcha already hit once:** `CREATE OR REPLACE FUNCTION create_sale(...)` with a *different parameter list* creates a second overload in Postgres instead of replacing the first — breaks PostgREST ("Could not choose the best candidate function"). If `create_sale` is ever modified again, drop the old signature explicitly first.
 
-Owner can:
-- **Add a seller** — Name, Phone, Password. Creates a Supabase Auth user with a hidden internal email (`name.hash@agripos.internal`) and inserts into `profiles` with `role = 'seller'`.
-- **Edit seller** — Change name, phone, reset password.
-- **Delete seller** — Removes auth user and profile.
+Three unrelated legacy tables (`transactions`, `transaction_items`, `stock_movements`) still exist from the old app, unused by this codebase, left alone — harmless clutter, not touched.
 
-### 2. Seller Login (`/seller/login`)
-**File:** `src/routes/seller.login.tsx`
+`supabase-schema.sql` is the fresh-install baseline (kept in sync with the above so a brand-new Supabase project wouldn't need the fix-*.sql files at all).
 
-Two-step flow:
-1. **Card grid** showing all sellers by name (no email shown). Fetched anonymously (no login needed at this step).
-2. **Password entry** for the selected seller.
+## Features built this session
 
-### 3. Backend Admin API
-**File:** `src/lib/api/admin-users.ts`
+| Feature | Where |
+|---|---|
+| Staff management (add/edit/reset/delete sellers) | `src/routes/owner.staff.tsx`, `src/lib/api/admin-users.ts` |
+| Seller card-grid login (no email needed) | `src/routes/seller.login.tsx` |
+| Show/hide password toggle | `owner.login.tsx`, `seller.login.tsx` |
+| POS payment methods: Cash / M-Pesa / Loan | `src/routes/seller.pos.tsx` |
+| Loan capture (existing/new client, due date) at checkout | same, via extended `create_sale()` RPC |
+| Owner "Credit / Loans" tab (balances, due dates, payment history, record repayment) | `src/routes/owner.sales-history.tsx` (tab: Credit/Loans) |
+| Financial Reports (week/month/year/custom, revenue trend, payment-method breakdown) | `src/routes/owner.reports.tsx` |
+| Hover tooltips on icon-only buttons | `src/components/ui/tooltip.tsx` (`HoverTip`), wired app-wide via `TooltipProvider` in `__root.tsx` |
+| Optional product brand/grade/type | `owner.products.tsx`, `src/lib/format.ts` (`productName()` fallback) |
 
-Server-side functions using the `service_role` key (bypasses RLS):
-- `createSeller(name, phone, password)`
-- `updateSeller(id, name, phone)`
-- `deleteSeller(id)`
-- `resetSellerPassword(id, newPassword)`
+## Cloudflare deployment — Worker, not Pages
 
-Uses a `generateHiddenEmail(name)` utility to map seller names to internal emails so sellers never need to know their email.
+**Direct answer to "do I upload as a Worker or a Page":** this project deploys as a **Worker** (specifically "Workers Builds" — Cloudflare's git-connected CI for Workers), not classic Cloudflare Pages. Both products are converging under "Workers & Pages" in the dashboard, but they behave differently under the hood:
 
-### 4. Supabase Schema
-**File:** `supabase-schema.sql`
+- **Classic Pages**: build command only, Cloudflare's own pipeline uploads the output directory — no separate deploy command, no `wrangler deploy`.
+- **Workers (what we have)**: build command (`npm run build`) *then* a deploy command (`npx wrangler deploy`), which reads a `wrangler.json` with `main` (entry point) + `assets.directory` (static files) and publishes an actual Worker with an assets binding.
 
-Key changes from original:
-- Added `phone text` column to `profiles`
-- `role` column supports `'owner'` and `'seller'` (old DB had `'cashier'` — that was the root cause of the crashes)
-- Updated project URL in the comment header
+The nitro build preset in `vite.config.ts` must match which one Cloudflare is actually running — `preset: "cloudflare-module"` (current setting) generates the Worker-shaped `main`+`assets` config; the old `"cloudflare-pages"` preset generated a Pages-only config (`pages_build_output_dir`) that `wrangler deploy` can't use, which is what caused the first deploy failures.
 
----
+### Two separate places for environment variables (easy to get wrong)
 
-## Root Cause of the Login / Staff Issues
+- **Settings → Variables & Secrets** — runtime only (`env.X` inside the Worker's `fetch` handler). `SUPABASE_SERVICE_ROLE_KEY` belongs here, marked **Secret**.
+- **Settings → Build → "Build variables and secrets"** — build-time only, explicitly *not* available at runtime. Vite's `VITE_*` vars get inlined into the bundle during `npm run build`, so `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` **must** go here, not (only) in the runtime section.
 
-The Supabase database at `hybmotfjgaepnxpixbrs.supabase.co` was **not a fresh database**. It had an old `handle_new_user` trigger from a previous setup that tried to insert `role = 'cashier'`, but the updated schema only accepts `'owner'` or `'seller'`. This caused a silent crash every time the app tried to create a seller.
+**Current status (as of last message): this was the active blocker.** The site was 500ing on every request because `import.meta.env.VITE_SUPABASE_URL` was empty at build time (client was only in the runtime vars section), so `createClient("", ...)` throws immediately on module load in `src/integrations/supabase/client.ts`, crashing SSR before React renders (caught generically by `src/server.ts`'s error wrapper).
 
-**Additionally**, the RLS (Row Level Security) policies were blocking reads with `403` errors because there was no policy allowing unauthenticated access to the seller list needed for the card-grid login page.
+**Fix in progress:** add `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` to **Settings → Build → Build variables and secrets**, then trigger a fresh deployment. Verify by hitting `https://agripos.suziednls.workers.dev/owner/login` and confirming it loads (not the generic "This page didn't load" error).
 
----
+## What still needs to be done
 
-## The Fix — SQL to Run
-
-The file `fix-rls.sql` (in the project root) contains the complete fix. It must be run in the **Supabase SQL Editor**:
-
-```sql
--- 0. Fix the trigger (root cause of staff creation failure)
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE v_count int; v_role text;
-BEGIN
-  SELECT count(*) INTO v_count FROM public.profiles;
-  v_role := CASE WHEN v_count = 0 THEN 'owner' ELSE 'seller' END;
-  INSERT INTO public.profiles (id, full_name, role)
-  VALUES (new.id, coalesce(new.raw_user_meta_data->>'full_name', new.email), v_role)
-  ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name;
-  RETURN new;
-END; $$;
-
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-
--- 1. Grants
-GRANT USAGE ON SCHEMA public TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO anon, authenticated;
-
--- 2. is_owner helper
-CREATE OR REPLACE FUNCTION public.is_owner(uid uuid)
-RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
-  SELECT EXISTS (SELECT 1 FROM public.profiles WHERE id = uid AND role = 'owner');
-$$;
-
--- 3. Drop all old policies
-DROP POLICY IF EXISTS "profiles read own or owner" ON public.profiles;
-DROP POLICY IF EXISTS "profiles insert self" ON public.profiles;
-DROP POLICY IF EXISTS "profiles update self or owner" ON public.profiles;
-DROP POLICY IF EXISTS "profiles read anon sellers" ON public.profiles;
-DROP POLICY IF EXISTS "Public profiles are viewable by everyone." ON public.profiles;
-DROP POLICY IF EXISTS "Users can insert their own profile." ON public.profiles;
-DROP POLICY IF EXISTS "Users can update own profile." ON public.profiles;
-DROP POLICY IF EXISTS "profiles select any" ON public.profiles;
-
--- 4. New open-read policy (fixes the 403 on login)
-CREATE POLICY "profiles select any" ON public.profiles FOR SELECT USING (true);
-
-CREATE POLICY "profiles insert self" ON public.profiles
-  FOR INSERT TO authenticated WITH CHECK (id = auth.uid());
-
-CREATE POLICY "profiles update self or owner" ON public.profiles
-  FOR UPDATE TO authenticated
-  USING (id = auth.uid() OR public.is_owner(auth.uid()));
-
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-```
-
-> **Important:** Run this in Supabase SQL Editor. After it succeeds, restart `npm run dev` and try adding a staff member. It will work.
-
----
-
-## Supabase Dashboard Settings Required
-
-- **Authentication → Email → Confirm email:** Must be **disabled** (to allow sellers to be created without email verification)
-- This is required for the staff creation flow to work
-
----
-
-## Files Changed / Created
-
-| File | Change |
-|------|--------|
-| `.env` | Updated to new Supabase credentials |
-| `supabase-schema.sql` | Added `phone` column, fixed role values, updated URL |
-| `src/integrations/supabase/client.ts` | Added `phone` to `Profile` type |
-| `src/components/owner/OwnerLayout.tsx` | Added "Staff" navigation link |
-| `src/lib/api/admin-users.ts` | **NEW** — Server-side admin user management functions |
-| `src/routes/owner.staff.tsx` | **NEW** — Staff management UI (add/edit/delete sellers) |
-| `src/routes/seller.login.tsx` | Redesigned — Two-step card-grid + password login |
-| `fix-rls.sql` | **NEW** — One-time SQL fix script to run in Supabase |
-
----
-
-## Current State of the Database
-
-| User | Role | Email |
-|------|------|-------|
-| Admin | `owner` | `admin@info.com` |
-| TESTER 1 | `owner` | `g3k0ch4mps@gmail.com` |
-| mike tester | `owner` | `napevi1817@herojp.com` |
-| admin (old) | `cashier` | `admin@agrostock.test` |
-
-> The old `admin@agrostock.test` with role `cashier` is a leftover from the previous setup. It should be deleted from the Supabase Auth dashboard to keep things clean.
-
----
-
-## What Still Needs To Be Done
-
-1. **Run `fix-rls.sql`** in Supabase SQL Editor (the single remaining blocker)
-2. **Disable Email Confirmation** in Supabase Auth settings
-3. **Delete old test users** from Supabase Auth (`admin@agrostock.test`, `napevi1817@herojp.com`, `g3k0ch4mps@gmail.com`, `ddf4405e...`)
-4. Test the full seller flow end-to-end
+1. Confirm the Build-variables fix above actually resolves the live 500 error.
+2. Disable **Authentication → Email → Confirm email** in Supabase (needed for seller accounts, which use fake `@agripos.internal` emails that can't receive confirmation mail) — check this was actually done; it was flagged early in the project but never explicitly re-confirmed after all the other fixes.
+3. Once live, smoke-test end-to-end on the deployed URL: owner login → add a seller → seller login → POS sale (cash/mpesa/loan) → owner Credit/Loans tab shows it → Financial Reports shows it.
+4. Consider whether to drop the three unused legacy tables (`transactions`, `transaction_items`, `stock_movements`) — currently left alone, harmless.
